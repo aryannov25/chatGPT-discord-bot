@@ -18,6 +18,7 @@ def run_discord_bot():
         loop.create_task(client.process_messages())
         logger.info(f'{client.user} is now running!')
 
+
     @client.tree.command(name="chat", description="Have a chat with ChatGPT")
     async def chat(interaction: discord.Interaction, *, message: str):
         if client.is_replying_all == "True":
@@ -29,9 +30,10 @@ def run_discord_bot():
         if interaction.user == client.user:
             return
         username = str(interaction.user)
-        channel = str(interaction.channel)
+        client.current_channel = interaction.channel
         logger.info(
-            f"\x1b[31m{username}\x1b[0m : /chat [{message}] in ({channel})")
+            f"\x1b[31m{username}\x1b[0m : /chat [{message}] in ({client.current_channel})")
+
         await client.enqueue_message(interaction, message)
 
 
@@ -47,6 +49,7 @@ def run_discord_bot():
             logger.info("You already on private mode!")
             await interaction.followup.send(
                 "> **WARN: You already on private mode. If you want to switch to public mode, use `/public`**")
+
 
     @client.tree.command(name="public", description="Toggle public access")
     async def public(interaction: discord.Interaction):
@@ -143,6 +146,7 @@ def run_discord_bot():
         logger.warning(
             f"\x1b[31m{client.chat_model} bot has been successfully reset\x1b[0m")
 
+
     @client.tree.command(name="help", description="Show help for the bot")
     async def help(interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
@@ -175,8 +179,43 @@ https://github.com/Zero6992/chatGPT-discord-bot""")
         logger.info(
             "\x1b[31mSomeone needs help!\x1b[0m")
 
+
+    @client.tree.command(name="info", description="Bot information")
+    async def info(interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False)
+        chat_engine_status = client.openAI_gpt_engine
+        chat_model_status = client.chat_model
+        if client.chat_model == "UNOFFICIAL":
+            chat_model_status = "ChatGPT(UNOFFICIAL)"
+        elif client.chat_model == "OFFICIAL":
+            chat_model_status = "OpenAI API(OFFICIAL)"
+        if client.chat_model != "UNOFFICIAL" and client.chat_model != "OFFICIAL":
+            chat_engine_status = "x"
+        elif client.openAI_gpt_engine == "text-davinci-002-render-sha":
+            chat_engine_status = "gpt-3.5"
+
+        await interaction.followup.send(f"""
+```fix
+chat-model: {chat_model_status}
+gpt-engine: {chat_engine_status}
+```
+""")
+
+
     @client.tree.command(name="draw", description="Generate an image with the Dalle2 model")
-    async def draw(interaction: discord.Interaction, *, prompt: str):
+    @app_commands.choices(amount=[
+        app_commands.Choice(name="1", value=1),
+        app_commands.Choice(name="2", value=2),
+        app_commands.Choice(name="3", value=3),
+        app_commands.Choice(name="4", value=4),
+        app_commands.Choice(name="5", value=5),
+        app_commands.Choice(name="6", value=6),
+        app_commands.Choice(name="7", value=7),
+        app_commands.Choice(name="8", value=8),
+        app_commands.Choice(name="9", value=9),
+        app_commands.Choice(name="10", value=10),
+    ])
+    async def draw(interaction: discord.Interaction, *, prompt: str, amount: int = 1):
         if interaction.user == client.user:
             return
 
@@ -187,14 +226,13 @@ https://github.com/Zero6992/chatGPT-discord-bot""")
 
         await interaction.response.defer(thinking=True, ephemeral=client.isPrivate)
         try:
-            path = await art.draw(prompt)
+            path = await art.draw(prompt, amount)
+            files = []
+            for idx, img in enumerate(path):
+                files.append(discord.File(img, filename=f"image{idx}.png"))
+            title = f'> **{prompt}** - {str(interaction.user.mention)} \n\n'
 
-            file = discord.File(path, filename="image.png")
-            title = f'> **{prompt}** - <@{str(interaction.user.mention)}' + '> \n\n'
-            embed = discord.Embed(title=title)
-            embed.set_image(url="attachment://image.png")
-
-            await interaction.followup.send(file=file, embed=embed)
+            await interaction.followup.send(files=files, content=title)
 
         except openai.InvalidRequestError:
             await interaction.followup.send(
@@ -279,6 +317,7 @@ https://github.com/Zero6992/chatGPT-discord-bot""")
             logger.info(
                 f'{username} requested an unavailable persona: `{persona}`')
 
+
     @client.event
     async def on_message(message):
         if client.is_replying_all == "True":
@@ -288,11 +327,12 @@ https://github.com/Zero6992/chatGPT-discord-bot""")
                 if message.channel.id == int(client.replying_all_discord_channel_id):
                     username = str(message.author)
                     user_message = str(message.content)
-                    channel = str(message.channel)
-                    logger.info(f"\x1b[31m{username}\x1b[0m : '{user_message}' ({channel})")
+                    client.current_channel = message.channel
+                    logger.info(f"\x1b[31m{username}\x1b[0m : '{user_message}' ({client.current_channel})")
+
                     await client.enqueue_message(message, user_message)
             else:
-                logger.exception("replying_all_discord_channel_id not found, please use the commnad `/replyall` again.")
+                logger.exception("replying_all_discord_channel_id not found, please use the command `/replyall` again.")
 
     TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
